@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 
 #Linear, 1st order, ODE
 class ExpDecay():
-    # x0 means x(0); N - number of steps; a,b - borders (a<b)
-    def __init__(self, x0 = 1, a = 0, b = 10, N = 1001):
+    # C means const in x(0); N - number of steps; a,b - borders (a<b)
+    def __init__(self, C = 1, a = 0, b = 10, N = 1001):
         self.t = np.linspace(a, b, N)
-        self.C = x0
+        self.C = C
         self.x = self.C * np.exp(-self.t)
 
     def plot(self):
