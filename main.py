@@ -11,19 +11,8 @@ from torch.utils.data import DataLoader, TensorDataset
 def loss_phys(network: nn.Module, t: torch.tensor):
     u = network(t)
     du_dt = torch.autograd.grad(u.sum(), t, create_graph=True)[0]
+    #du_dx = torch.autograd.grad(u.sum(), x, create_graph=True)[0]
     return du_dt
-
-# same written in train, no need to use
-def loss_full(network: nn.Module, variables: torch.tensor, true_u: torch.tensor):
-    mse_loss = nn.MSELoss()
-    u = network(variables)
-    mse = mse_loss(true_u, u)
-    pdes = loss_phys(network=network, variables=variables)
-
-    #our equation with respect of var[0] = t for ExpDec
-    phys = pdes[0] + u
-
-    return mse + phys
 
 # Main section
 if __name__ == '__main__':
@@ -122,3 +111,4 @@ if __name__ == '__main__':
             print('val loss:', mean_loss_batch.item())
         losses_val.append(mean_loss_batch.item())
 
+    # Test section

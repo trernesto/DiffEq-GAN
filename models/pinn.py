@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 
-class PINN():
+class PINN(nn.Module):
     #input_size ~ size(len) of input vector
     def __init__(self, input_size = 1, hidden_layer_size = 12, number_of_hidden_layers = 2, output_size = 1):
         super().__init__()
