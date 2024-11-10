@@ -37,6 +37,6 @@ class PINN():
 
         self.layers.add_module('output layer', out_layer)
 
-    def forward(self, x: nn.torch):
+    def forward(self, x: torch.tensor):
         out = self.layers(x)
         return out
