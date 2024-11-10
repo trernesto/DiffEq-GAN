@@ -1,8 +1,29 @@
 from data.exp_decay import ExpDecay
 from data.coupled_oscillators import CoupOsc
+from models.pinn import PINN
+
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
+# Loss Section
+# variables - tensor of all variables needed to differentate
+def loss_phys(network: nn.Module, variables: torch.tensor):
+    u = network(variables)
+    pdes = torch.tensor(())
+    for i in range(len(variables)):
+        du_dvar = torch.autograd.grad(u.sum(), variables[i], create_graph=True)[0]
+        pdes = torch.concat(pdes, du_dvar)
+    return pdes
+
+def loss_full(network: nn.Module, variables: torch.tensor, true_u: torch.tensor):
+    mse_loss = nn.MSELoss()
+    u = network(variables)
+    mse = mse_loss(true_u, u)
+    phys = loss_phys(network=network, variables=variables)
+    return mse + phys
+
+# Main section
 if __name__ == '__main__':
     
     exp_decay = ExpDecay(C = 1)
