@@ -8,14 +8,10 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader, TensorDataset
 
 # Loss Section
-# variables - tensor of all variables needed to differentate
-def loss_phys(network: nn.Module, variables: torch.tensor):
-    u = network(variables)
-    pdes = torch.tensor(())
-    for i in range(len(variables)):
-        du_dvar = torch.autograd.grad(u.sum(), variables[i], create_graph=True)[0]
-        pdes = torch.concat(pdes, du_dvar)
-    return pdes
+def loss_phys(network: nn.Module, t: torch.tensor):
+    u = network(t)
+    du_dt = torch.autograd.grad(u.sum(), t, create_graph=True)[0]
+    return du_dt
 
 # same written in train, no need to use
 def loss_full(network: nn.Module, variables: torch.tensor, true_u: torch.tensor):
@@ -35,8 +31,10 @@ if __name__ == '__main__':
 
     # raw data
     exp_decay = ExpDecay(C = 1)
-    u = exp_decay.x
-    t = exp_decay.t
+    u = torch.from_numpy(exp_decay.x).float()
+    t = torch.from_numpy(exp_decay.t).float()
+    u = u.view(-1, 1)
+    t = u.view(-1, 1)
     exp_decay_const = exp_decay.C
     dataset = TensorDataset(u, t)
 
@@ -60,7 +58,7 @@ if __name__ == '__main__':
 
     model = PINN()
     model.to(device)
-    opt = nn.optim.Adam(model.parameters())
+    opt = torch.optim.Adam(model.parameters())
 
     criterion_mse = nn.MSELoss()
     criterion_phys = loss_phys
@@ -69,6 +67,7 @@ if __name__ == '__main__':
     
 
     epochs = 100
+    print_epoch = 50
     losses_train = []
     losses_val = []    
     for epoch in range(epochs):
@@ -81,7 +80,8 @@ if __name__ == '__main__':
             loss_mse = criterion_mse(model_out, batch_u)
 
             #pde loss section
-            pdes = loss_phys(model, batch_t)
+            bt = Variable(batch_t, requires_grad=True)
+            pdes = loss_phys(model, bt)
             dudt = pdes[0]
 
             eq = dudt + model_out
@@ -91,30 +91,34 @@ if __name__ == '__main__':
 
             loss = loss_mse + loss_ph
             mean_loss_batch += loss/len(data_train)
-            loss.backwards()
+            loss.backward()
             opt.step()
-        print('train loss:', mean_loss_batch)
-        losses_train.append(mean_loss_batch)
+        
+        if (epoch + 1) % print_epoch == 0:
+            print(f'epoch: {epoch + 1}')
+            print('train loss:', mean_loss_batch.item())
+        losses_train.append(mean_loss_batch.item())
 
-        with torch.no_grad():
-            mean_loss_batch = 0
-            for batch_t, batch_x in data_val:
-                model_out = model(batch_t)
+        mean_loss_batch = 0
+        for batch_u, batch_t in data_val:
+            model_out = model(batch_t)
 
-                #mse loss section
-                loss_mse = criterion_mse(model_out, batch_u)
+            #mse loss section
+            loss_mse = criterion_mse(model_out, batch_u)
 
-                #pde loss section
-                pdes = loss_phys(model, batch_t)
-                dudt = pdes[0]
+            #pde loss section
+            bt = Variable(batch_t, requires_grad=True)
+            pdes = loss_phys(model, bt)
+            dudt = pdes[0]
 
-                eq = dudt + model_out
-                zeros = torch.zeros_like(eq)
-                loss_ph = criterion_mse(eq, zeros)
+            eq = dudt + model_out
+            zeros = torch.zeros_like(eq)
+            loss_ph = criterion_mse(eq, zeros)
 
 
-                loss = loss_mse + loss_ph
-                mean_loss_batch += loss/len(data_val)
-            print('val loss:', mean_loss_batch)
-            losses_val.append(mean_loss_batch)
+            loss = loss_mse + loss_ph
+            mean_loss_batch += loss/len(data_val)
+        if (epoch + 1) % print_epoch == 0:    
+            print('val loss:', mean_loss_batch.item())
+        losses_val.append(mean_loss_batch.item())
 
