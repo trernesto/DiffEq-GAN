@@ -21,14 +21,15 @@ def loss_phys(network: nn.Module, t: torch.tensor):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    train_exp_decay = ExpDecay(C = 1)
+    train_exp_decay = ExpDecay(C = 1, N = 101, a = 0, b = 1.5)
+    train_exp_decay.set_points_to_random(C_start=1, C_finish=5)
     train_u = torch.tensor(train_exp_decay.x, dtype = torch.float).view(-1, 1)
     train_t = torch.tensor(train_exp_decay.t, dtype = torch.float).view(-1, 1)
     exp_decay_const = train_exp_decay.C
     train_dataset = TensorDataset(train_u, train_t)
 
     # raw data
-    exp_decay = ExpDecay(C = 5)
+    exp_decay = ExpDecay(C = 3, N = 101)
     test_u = torch.tensor(exp_decay.x, dtype = torch.float).view(-1, 1)
     test_t = torch.tensor(exp_decay.t, dtype = torch.float).view(-1, 1)
     exp_decay_const = exp_decay.C
@@ -64,8 +65,8 @@ if __name__ == '__main__':
     #scheduler = ...
     
 
-    epochs = 500
-    print_epoch = 100
+    epochs = 20_000
+    print_epoch = 1_000
     
     losses_train = []
     losses_val = []
@@ -93,8 +94,15 @@ if __name__ == '__main__':
             zeros = torch.zeros_like(eq)
             loss_ph = criterion_mse(eq, zeros)
 
+            #Boundary conditions
+            x_right_boundary = torch.tensor((train_exp_decay.b), dtype = torch.float,  requires_grad =  True)
+            u_predicted_boundary = model(x_right_boundary)
+            #You can use this, but lim b->inf -> u_true -> 0
+            #u_true = train_exp_decay.equation(x_right_boundary)
+            u_true = torch.tensor((0), dtype = torch.float,  requires_grad =  True)
+            loss_boundary = loss_mse(u_predicted_boundary, u_true)
 
-            loss = loss_mse + loss_ph
+            loss = loss_mse + loss_ph + loss_boundary
             mean_loss_batch += loss/len(data_train)
             mean_loss_mse += loss_mse/len(data_train)
             mean_loss_phys += loss_ph/len(data_train)

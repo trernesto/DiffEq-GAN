@@ -15,8 +15,8 @@ class ExpDecay():
         self.C = C
         self.x = self.C * np.exp(-self.t)
         
-    def equation(self, C: np.array, t: np.array) -> np.array:
-        return C * np.exp(-t)
+    def equation(self, t: np.array) -> np.array:
+        return self.C * np.exp(-t)
         
     def set_points_to_random(self, C_start = 1, C_finish = 1):
         a = self.a
