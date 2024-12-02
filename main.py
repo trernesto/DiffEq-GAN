@@ -21,18 +21,26 @@ def loss_phys(network: nn.Module, t: torch.tensor):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+    train_exp_decay = ExpDecay(C = 1)
+    train_u = torch.tensor(train_exp_decay.x, dtype = torch.float).view(-1, 1)
+    train_t = torch.tensor(train_exp_decay.t, dtype = torch.float).view(-1, 1)
+    exp_decay_const = train_exp_decay.C
+    train_dataset = TensorDataset(train_u, train_t)
+
     # raw data
-    exp_decay = ExpDecay(C = 1)
-    u = torch.tensor(exp_decay.x, dtype = torch.float).view(-1, 1)
-    t = torch.tensor(exp_decay.t, dtype = torch.float).view(-1, 1)
+    exp_decay = ExpDecay(C = 5)
+    test_u = torch.tensor(exp_decay.x, dtype = torch.float).view(-1, 1)
+    test_t = torch.tensor(exp_decay.t, dtype = torch.float).view(-1, 1)
     exp_decay_const = exp_decay.C
-    dataset = TensorDataset(u, t)
+    test_dataset = TensorDataset(test_u, test_t)
 
     
     g_cpu = torch.Generator()
     g_cpu = g_cpu.manual_seed(42)
     
-    train_set, val_set, test_set = torch.utils.data.random_split(dataset=dataset, lengths=[0.3, 0.35, 0.35], generator = g_cpu)
+    train_set, val_set = torch.utils.data.random_split(dataset=train_dataset, lengths=[0.5, 0.5], generator = g_cpu)
+    
+    test_set = test_dataset
     
     batch_size = 64
     data_train = DataLoader(train_set, batch_size=batch_size, shuffle=True)
@@ -154,7 +162,8 @@ if __name__ == '__main__':
     axs[2].plot(x, losses_phys_val, label = 'val')
     axs[2].legend()
 
-    #plt.show()
+
+    plt.savefig('./losses.png')
     plt.close()
 
     plt.clf()
@@ -169,11 +178,26 @@ if __name__ == '__main__':
         plot_true_u = np.concatenate((plot_true_u, true_u.detach().numpy().flatten()), axis = None)
         plot_u = np.concatenate((plot_u, u.detach().numpy().flatten()), axis = None)
         plot_t = np.concatenate((plot_t, t.detach().numpy().flatten()), axis = None)
+        
+    plot_train_u = np.array([])
+    plot_train_t = np.array([])
+        
+    for train_u, train_t in data_train:
+        plot_train_u = np.concatenate((plot_train_u, train_u.detach().numpy().flatten()), axis = None)
+        plot_train_t = np.concatenate((plot_train_t, train_t.detach().numpy().flatten()), axis = None)
+        
     
     plt.title('True u and predicted u')
     _, plot_true_u = zip(*sorted(zip(plot_t, plot_true_u)))
     plot_t, plot_u = zip(*sorted(zip(plot_t, plot_u)))
+    #Plot true and model predicted values
     plt.plot(plot_t, plot_true_u, label = 'true u')
     plt.plot(plot_t, plot_u, label = 'Network prediction')
+    #plot trained points
+    plt.scatter(plot_train_t, plot_train_u, label = 'Train points', linewidths=0.5, marker = '*')
+    
+    plt.ylabel('u(t)')
+    plt.xlabel('time')
+    
     plt.legend()
-    plt.show()
+    plt.savefig('./Network prediction.png')

@@ -11,6 +11,11 @@ class ExpDecay():
         self.t = np.linspace(a, b, N)
         self.C = C
         self.x = self.C * np.exp(-self.t)
+        
+    def get_random_points(self, C = 1, a = 0, b = 10, N = 1001):
+        t = np.random.uniform(a, b, size = N)
+        random_points = self.C * np.exp(-t)
+        return random_points
 
     def plot(self):
         plt.plot(self.t, self.x, label = f'x(t) = {self.C} * e^-t')
