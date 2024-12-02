@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Loss Section
-def loss_phys(network: nn.Module, C:torch.tensor, t: torch.tensor):
+def diff_t(network: nn.Module, C:torch.tensor, t: torch.tensor):
     input = torch.cat((C, t) , dim = 1)
     u = network(input)
     du_dt = torch.autograd.grad(u.sum(), t, create_graph=True)[0]
@@ -22,7 +22,7 @@ def loss_phys(network: nn.Module, C:torch.tensor, t: torch.tensor):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    train_exp_decay = ExpDecay(C = 1, N = 11, a = 0, b = 10)
+    train_exp_decay = ExpDecay(C = 1, N = 121, a = 0, b = 10)
     train_exp_decay.set_points_to_random(C_start=1, C_finish=1)
     train_u = torch.tensor(train_exp_decay.x, dtype = torch.float).view(-1, 1)
     train_t = torch.tensor(train_exp_decay.t, dtype = torch.float).view(-1, 1)
@@ -57,22 +57,22 @@ if __name__ == '__main__':
 
     # data to train val test section
 
-    model_generator = Generator(input_size=2, number_of_hidden_layers=2, hidden_layer_size=40)
-    model_discriminator = Discriminator(number_of_hidden_layers=4, hidden_layer_size=20)
+    model_generator = Generator(input_size=2, number_of_hidden_layers=2, hidden_layer_size=16)
+    model_discriminator = Discriminator(number_of_hidden_layers=2, hidden_layer_size=20)
     model_generator.to(device)
     model_discriminator.to(device)
     
     
-    opt_generator = torch.optim.Adam(model_generator.parameters())
-    opt_discriminator = torch.optim.Adam(model_discriminator.parameters())
+    opt_generator = torch.optim.Adam(model_generator.parameters(), lr = 3e-4)
+    opt_discriminator = torch.optim.Adam(model_discriminator.parameters(), lr = 3e-4)
 
     criterion = nn.BCELoss()
 
     #scheduler = ...
     
 
-    epochs = 20_000
-    print_epoch = 1000
+    epochs = 5000
+    print_epoch = 500
     
     losses_generator_train = []
     losses_generator_val = []
@@ -84,20 +84,26 @@ if __name__ == '__main__':
         mean_loss_generator_batch = 0
         mean_loss_discriminator_batch = 0
         for batch_u, batch_t, batch_C in data_train:
-            input = torch.cat((batch_C, batch_t), dim = 1)
             
             #Discriminator loss
             #Real part
             opt_discriminator.zero_grad()
             
-            model_discriminator_out_true = model_discriminator(batch_u)
+            RHS = torch.zeros_like(batch_u) + torch.rand(1) * 1e-8
+            model_discriminator_out_true = model_discriminator(RHS)
+            
             ones = torch.ones_like(model_discriminator_out_true)
             loss_discriminator_real = criterion(model_discriminator_out_true, ones)
             
             loss_discriminator_real.backward()
             #fake part
-            model_generator_out = model_generator(input)
-            model_discriminator_out_g = model_discriminator(model_generator_out.detach())
+            #MODEL
+            bC = Variable(batch_C, requires_grad=False)
+            bt = Variable(batch_t + torch.rand(1) * 1e-6, requires_grad=True)
+            input = torch.cat((bC, bt), dim = 1)
+            LHS = model_generator(input) + diff_t(model_generator, C=bC, t=bt)
+            #model_discriminator generated loss
+            model_discriminator_out_g = model_discriminator(LHS.detach())
             
             zeros = torch.zeros_like(model_discriminator_out_g)
             loss_discriminator_fake = criterion(model_discriminator_out_g, zeros)
@@ -110,7 +116,7 @@ if __name__ == '__main__':
             #generator loss section
             opt_generator.zero_grad()
             
-            model_discriminator_out_g = model_discriminator(model_generator_out)
+            model_discriminator_out_g = model_discriminator(LHS)
             ones = torch.ones_like(model_discriminator_out_g)
             loss_generator = criterion(model_discriminator_out_g, ones)
             
@@ -129,32 +135,37 @@ if __name__ == '__main__':
         losses_discriminator_train.append(loss_discriminator.item())
 
         for batch_u, batch_t, batch_C in data_val:
-            input = torch.cat((batch_C, batch_t), dim = 1)
-            
             #Discriminator loss
             #Real part
             
-            model_discriminator_out_true = model_discriminator(batch_u)
+            RHS = torch.zeros_like(batch_u)
+            model_discriminator_out_true = model_discriminator(RHS)
+            
             ones = torch.ones_like(model_discriminator_out_true)
             loss_discriminator_real = criterion(model_discriminator_out_true, ones)
             
+            loss_discriminator_real.backward()
             #fake part
-            model_generator_out = model_generator(input)
-            model_discriminator_out_g = model_discriminator(model_generator_out.detach())
+            #MODEL
+            bC = Variable(batch_C, requires_grad=False)
+            bt = Variable(batch_t, requires_grad=True)
+            input = torch.cat((bC, bt), dim = 1)
+            LHS = model_generator(input) + diff_t(model_generator, C=bC, t=bt)
+            #model_discriminator generated loss
+            model_discriminator_out_g = model_discriminator(LHS.detach())
             
             zeros = torch.zeros_like(model_discriminator_out_g)
             loss_discriminator_fake = criterion(model_discriminator_out_g, zeros)
+            
+            loss_discriminator_fake.backward()
             
             loss_discriminator = loss_discriminator_fake + loss_discriminator_real
 
             #generator loss section
             
-            model_discriminator_out_g = model_discriminator(model_generator_out)
-            ones = torch.zeros_like(model_discriminator_out_g)
+            model_discriminator_out_g = model_discriminator(LHS)
+            ones = torch.ones_like(model_discriminator_out_g)
             loss_generator = criterion(model_discriminator_out_g, ones)
-
-            mean_loss_generator_batch += loss_generator/len(data_train)
-            mean_loss_discriminator_batch += loss_discriminator/len(data_train)
 
         if (epoch + 1) % print_epoch == 0:    
             print('val generator loss:', loss_generator.item())
@@ -164,32 +175,32 @@ if __name__ == '__main__':
         losses_discriminator_val.append(loss_discriminator.item())
 
     # Test secti
-    fig, axs = plt.subplots(4, sharex=True)
+    fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
     fig.suptitle('Loss function')
 
     x = np.arange(epochs)
 
-    axs[0].set_title('generator loss')
-    axs[0].plot(x, losses_generator_train, label = 'train')
-    axs[0].plot(x, losses_generator_val, label = 'val')
-    axs[0].legend()
+    axs[0, 0].set_title('generator loss')
+    axs[0, 0].plot(x, losses_generator_train, label = 'train')
+    axs[0, 0].plot(x, losses_generator_val, label = 'val')
+    axs[0, 0].legend()
 
     
-    axs[1].set_title('discriminator loss')
-    axs[1].plot(x, losses_discriminator_train, label = 'train')
-    axs[1].plot(x, losses_discriminator_val, label = 'val')
-    axs[1].legend()
+    axs[0, 1].set_title('discriminator loss')
+    axs[0, 1].plot(x, losses_discriminator_train, label = 'train')
+    axs[0, 1].plot(x, losses_discriminator_val, label = 'val')
+    axs[0, 1].legend()
 
     
-    axs[2].set_title('Train losses')
-    axs[2].plot(x, losses_generator_train, label = 'train generator')
-    axs[2].plot(x, losses_discriminator_train, label = 'train discriminator')
-    axs[2].legend()
+    axs[1, 0].set_title('Train losses')
+    axs[1, 0].plot(x, losses_generator_train, label = 'train generator')
+    axs[1, 0].plot(x, losses_discriminator_train, label = 'train discriminator')
+    axs[1, 0].legend()
     
-    axs[3].set_title('Val losses')
-    axs[3].plot(x, losses_generator_val, label = 'val generator')
-    axs[3].plot(x, losses_discriminator_val, label = 'val discriminator')
-    axs[3].legend()
+    axs[1, 1].set_title('Val losses')
+    axs[1, 1].plot(x, losses_generator_val, label = 'val generator')
+    axs[1, 1].plot(x, losses_discriminator_val, label = 'val discriminator')
+    axs[1, 1].legend()
 
 
 
