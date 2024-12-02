@@ -21,8 +21,8 @@ def loss_phys(network: nn.Module, t: torch.tensor):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    train_exp_decay = ExpDecay(C = 1, N = 101, a = 0, b = 1.5)
-    train_exp_decay.set_points_to_random(C_start=1, C_finish=5)
+    train_exp_decay = ExpDecay(C = 1, N = 301, a = 0, b = 3)
+    train_exp_decay.set_points_to_random(C_start=0, C_finish=10)
     train_u = torch.tensor(train_exp_decay.x, dtype = torch.float).view(-1, 1)
     train_t = torch.tensor(train_exp_decay.t, dtype = torch.float).view(-1, 1)
     exp_decay_const = train_exp_decay.C
@@ -95,12 +95,14 @@ if __name__ == '__main__':
             loss_ph = criterion_mse(eq, zeros)
 
             #Boundary conditions
-            x_right_boundary = torch.tensor((train_exp_decay.b), dtype = torch.float,  requires_grad =  True)
+            x_right_boundary = torch.tensor([20], dtype = torch.float, requires_grad =  True)
+            
             u_predicted_boundary = model(x_right_boundary)
             #You can use this, but lim b->inf -> u_true -> 0
             #u_true = train_exp_decay.equation(x_right_boundary)
-            u_true = torch.tensor((0), dtype = torch.float,  requires_grad =  True)
-            loss_boundary = loss_mse(u_predicted_boundary, u_true)
+            u_true = torch.zeros_like(u_predicted_boundary)
+            
+            loss_boundary = criterion_mse(u_predicted_boundary, u_true)
 
             loss = loss_mse + loss_ph + loss_boundary
             mean_loss_batch += loss/len(data_train)
