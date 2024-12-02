@@ -8,14 +8,24 @@ import matplotlib.pyplot as plt
 class ExpDecay():
     # C means const in x(0); N - number of steps; a,b - borders (a<b)
     def __init__(self, C = 1, a = 0, b = 10, N = 1001):
+        self.a = a
+        self.b = b
+        self.N = N
         self.t = np.linspace(a, b, N)
         self.C = C
         self.x = self.C * np.exp(-self.t)
         
-    def get_random_points(self, C = 1, a = 0, b = 10, N = 1001):
-        t = np.random.uniform(a, b, size = N)
-        random_points = self.C * np.exp(-t)
-        return random_points
+    def equation(self, C: np.array, t: np.array) -> np.array:
+        return C * np.exp(-t)
+        
+    def set_points_to_random(self, C_start = 1, C_finish = 1):
+        a = self.a
+        b = self.b
+        N = self.N
+        self.t = np.random.uniform(a, b, size = N)
+        #self.C = C
+        self.C = np.random.uniform(C_start, C_finish, size=N)
+        self.x = self.equation(self.C, self.t)
 
     def plot(self):
         plt.plot(self.t, self.x, label = f'x(t) = {self.C} * e^-t')
