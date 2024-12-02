@@ -25,7 +25,7 @@ class ExpDecay():
         self.t = np.random.uniform(a, b, size = N)
         #self.C = C
         self.C = np.random.uniform(C_start, C_finish, size=N)
-        self.x = self.equation(self.C, self.t)
+        self.x = self.equation(self.t)
 
     def plot(self):
         plt.plot(self.t, self.x, label = f'x(t) = {self.C} * e^-t')
