@@ -11,8 +11,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Loss Section
-def loss_phys(network: nn.Module, t: torch.tensor):
-    u = network(t)
+def loss_phys(network: nn.Module, C:torch.tensor, t: torch.tensor):
+    input = torch.cat((C, t) , dim = 1)
+    u = network(input)
     du_dt = torch.autograd.grad(u.sum(), t, create_graph=True)[0]
     #du_dx = torch.autograd.grad(u.sum(), x, create_graph=True)[0]
     return du_dt
@@ -21,15 +22,16 @@ def loss_phys(network: nn.Module, t: torch.tensor):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    train_exp_decay = ExpDecay(C = 1, N = 301, a = 0, b = 3)
-    train_exp_decay.set_points_to_random(C_start=0, C_finish=10)
+    train_exp_decay = ExpDecay(C = 1, N = 21, a = 0, b = 3)
+    train_exp_decay.set_points_to_random(C_start=1, C_finish=3)
     train_u = torch.tensor(train_exp_decay.x, dtype = torch.float).view(-1, 1)
     train_t = torch.tensor(train_exp_decay.t, dtype = torch.float).view(-1, 1)
-    exp_decay_const = train_exp_decay.C
-    train_dataset = TensorDataset(train_u, train_t)
+    train_C = torch.tensor(train_exp_decay.C, dtype = torch.float).view(-1, 1)
+    #exp_decay_const = train_exp_decay.C
+    train_dataset = TensorDataset(train_u, train_t, train_C)
 
     # raw data
-    exp_decay = ExpDecay(C = 3, N = 101)
+    exp_decay = ExpDecay(C = 5, N = 101)
     test_u = torch.tensor(exp_decay.x, dtype = torch.float).view(-1, 1)
     test_t = torch.tensor(exp_decay.t, dtype = torch.float).view(-1, 1)
     exp_decay_const = exp_decay.C
@@ -55,7 +57,7 @@ if __name__ == '__main__':
 
     # data to train val test section
 
-    model = PINN(number_of_hidden_layers=2, hidden_layer_size=8)
+    model = PINN(input_size=2, number_of_hidden_layers=2, hidden_layer_size=8)
     model.to(device)
     opt = torch.optim.Adam(model.parameters())
 
@@ -79,16 +81,18 @@ if __name__ == '__main__':
         mean_loss_batch = 0
         mean_loss_mse = 0
         mean_loss_phys = 0
-        for batch_u, batch_t in data_train:
+        for batch_u, batch_t, batch_C in data_train:
             opt.zero_grad()
-            model_out = model(batch_t)
+            input = torch.cat((batch_C, batch_t), dim = 1)
+            model_out = model(input)
 
             #mse loss section
             loss_mse = criterion_mse(model_out, batch_u)
 
             #pde loss section
+            bC = Variable(batch_C, requires_grad=True)
             bt = Variable(batch_t, requires_grad=True)
-            dudt = loss_phys(model, bt)
+            dudt = loss_phys(model, bC, bt)
 
             eq = dudt + model_out
             zeros = torch.zeros_like(eq)
@@ -96,8 +100,9 @@ if __name__ == '__main__':
 
             #Boundary conditions
             x_right_boundary = torch.tensor([20], dtype = torch.float, requires_grad =  True)
-            
-            u_predicted_boundary = model(x_right_boundary)
+            c_right_boundary = torch.tensor([np.random.uniform(0, 10)], dtype = torch.float, requires_grad = True)
+            input = torch.cat((c_right_boundary, x_right_boundary), dim = 0)
+            u_predicted_boundary = model(input)
             #You can use this, but lim b->inf -> u_true -> 0
             #u_true = train_exp_decay.equation(x_right_boundary)
             u_true = torch.zeros_like(u_predicted_boundary)
@@ -122,15 +127,17 @@ if __name__ == '__main__':
         mean_loss_batch = 0
         mean_loss_mse = 0
         mean_loss_phys = 0
-        for batch_u, batch_t in data_val:
-            model_out = model(batch_t)
+        for batch_u, batch_t, batch_C in data_val:
+            input = torch.cat((batch_C, batch_t), dim = 1)
+            model_out = model(input)
 
             #mse loss section
             loss_mse = criterion_mse(model_out, batch_u)
 
             #pde loss section
+            bC = Variable(batch_C, requires_grad=True)
             bt = Variable(batch_t, requires_grad=True)
-            dudt = loss_phys(model, bt)
+            dudt = loss_phys(model, bC, bt)
 
             eq = dudt + model_out
             zeros = torch.zeros_like(eq)
@@ -184,7 +191,9 @@ if __name__ == '__main__':
     plot_t = np.array([])
 
     for true_u, t in data_test:
-        u = model(t)
+        c = exp_decay_const * torch.ones_like(t)
+        input = torch.cat((c, t), dim = 1)
+        u = model(input)
         plot_true_u = np.concatenate((plot_true_u, true_u.detach().numpy().flatten()), axis = None)
         plot_u = np.concatenate((plot_u, u.detach().numpy().flatten()), axis = None)
         plot_t = np.concatenate((plot_t, t.detach().numpy().flatten()), axis = None)
@@ -192,7 +201,7 @@ if __name__ == '__main__':
     plot_train_u = np.array([])
     plot_train_t = np.array([])
         
-    for train_u, train_t in data_train:
+    for train_u, train_t, _ in data_train:
         plot_train_u = np.concatenate((plot_train_u, train_u.detach().numpy().flatten()), axis = None)
         plot_train_t = np.concatenate((plot_train_t, train_t.detach().numpy().flatten()), axis = None)
         
