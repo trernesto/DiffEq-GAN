@@ -10,6 +10,7 @@ def generate_pde_with_boundary_conditions():
     # Задаём аналитическое решение
     solution = sp.sin(x) * sp.cos(y) * sp.exp(-t)
     
+    u = solution
     # Вычисляем частные производные
     u_x = sp.diff(solution, x)
     u_y = sp.diff(solution, y)
@@ -18,7 +19,7 @@ def generate_pde_with_boundary_conditions():
     u_yy = sp.diff(u_y, y)
     
     # Формируем ДНУЧП
-    pde = sp.Eq(u_t, u_xx + u_yy - solution**3)
+    pde = sp.Eq(u**2 * u_t, u_xx - u_yy - u**3)
     
     # Определяем область и граничные условия
     domain = {
@@ -44,14 +45,3 @@ def generate_pde_with_boundary_conditions():
 
 # Пример использования
 analytical_solution, pde, domain, boundary_conditions = generate_pde_with_boundary_conditions()
-
-print("Аналитическое решение:")
-sp.pprint(analytical_solution)
-print("\nСгенерированное ДНУЧП:")
-sp.pprint(pde)
-print("\nОбласть определения:")
-for var, bounds in domain.items():
-    print(f"{var} ∈ {bounds}")
-print("\nГраничные условия:")
-for (var, val), condition in boundary_conditions.items():
-    print(f"На {var} = {val}: u = {condition}")
