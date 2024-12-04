@@ -35,7 +35,8 @@ def diff_yy(network: nn.Module, x:torch.tensor, y:torch.tensor, t: torch.tensor)
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    train_equation = Nonlinear()
+    grid_size = 64
+    train_equation = Nonlinear(t_dots = 100, grid_size=grid_size)
     #train_exp_decay.set_points_to_random(C_start=0, C_finish=4)
     train_u = torch.tensor(train_equation.u, dtype = torch.float).view(-1, 1)
     train_x = torch.tensor(train_equation.x, dtype = torch.float).view(-1, 1)
@@ -46,8 +47,10 @@ if __name__ == '__main__':
     
 
     # raw data
+    test_time = 0.1
+    
     test_equation = Nonlinear(C = 1, grid_size = 101)
-    u, x, y, t = test_equation.get_points_at_time(t = 0)
+    u, x, y, t = test_equation.get_points_at_time(t = test_time)
     test_u = torch.tensor(u, dtype = torch.float).view(-1, 1)
     test_x = torch.tensor(x, dtype = torch.float).view(-1, 1)
     test_y = torch.tensor(y, dtype = torch.float).view(-1, 1)
@@ -75,7 +78,7 @@ if __name__ == '__main__':
 
     # data to train val test section
 
-    model = PINN(input_size=3, number_of_hidden_layers=3, hidden_layer_size=16)
+    model = PINN(input_size=3, number_of_hidden_layers=4, hidden_layer_size=64)
     model.to(device)
     opt = torch.optim.Adam(model.parameters())
 
@@ -84,8 +87,8 @@ if __name__ == '__main__':
     #scheduler = ...
     
 
-    epochs = 25
-    print_epoch = 5
+    epochs = 3
+    print_epoch = 1
     
     losses_train = []
     losses_val = []
@@ -120,18 +123,69 @@ if __name__ == '__main__':
             zeros = torch.zeros_like(eq)
             loss_ph = criterion_mse(eq, zeros)
 
-            #Boundary conditions
-            #x_right_boundary = torch.tensor([20], dtype = torch.float, requires_grad =  True)
-            #c_right_boundary = torch.tensor([np.random.uniform(0, 10)], dtype = torch.float, requires_grad = True)
-            #input = torch.cat((c_right_boundary, x_right_boundary), dim = 0)
-            #u_predicted_boundary = model(input)
-            #You can use this, but lim b->inf -> u_true -> 0
-            #u_true = train_exp_decay.equation(x_right_boundary)
-            #u_true = torch.zeros_like(u_predicted_boundary)
-            
-            #loss_boundary = criterion_mse(u_predicted_boundary, u_true)
+            '''
+            Область определения:
+            x ∈ (0, pi)
+            y ∈ (0, pi)
+            t ∈ (0, 1)
+            Граничные условия:
+            На x = 0: u = 0
+            На x = pi: u = 0
+            На y = 0: u = exp(-t)*sin(x)
+            На y = pi: u = -exp(-t)*sin(x)
+            На t = 0: u = sin(x)*cos(y)
+            '''
 
-            loss = loss_mse + loss_ph #+ loss_boundary
+            #Boundary conditions
+            
+            x = torch.linspace(0, torch.pi, grid_size, dtype = torch.float, requires_grad =  True).resize(grid_size, 1)
+            y = torch.linspace(0, torch.pi, grid_size, dtype = torch.float, requires_grad =  True).resize(grid_size, 1)
+            t = torch.linspace(0, 0.2, grid_size, dtype = torch.float, requires_grad =  True).resize(grid_size, 1)
+            
+            # x boundary
+            x_left_boundary = 0 * torch.ones((grid_size, 1), dtype = torch.float, requires_grad =  True)
+            x_right_boundary = torch.pi * torch.ones((grid_size, 1), dtype = torch.float, requires_grad =  True)
+                      
+            #right
+            y_left_boundary = 0 * torch.ones((grid_size, 1), dtype = torch.float, requires_grad =  True)
+            y_right_boundary = torch.pi * torch.ones((grid_size, 1), dtype = torch.float, requires_grad =  True)
+            
+            # time = 0
+            t_boundary = 0 * torch.ones((grid_size, 1), dtype = torch.float, requires_grad =  True)
+            
+            #c_right_boundary = torch.tensor([np.random.uniform(0, 10)], dtype = torch.float, requires_grad = True)
+            
+            # x = 0: u = 0
+            input = torch.cat((x_left_boundary, y, t), dim = 1)
+            u_predicted_boundary = model(input)
+            u_true = torch.zeros_like(u_predicted_boundary)
+            loss_boundary = criterion_mse(u_predicted_boundary, u_true)
+            
+            # x = pi: u = 0
+            input = torch.cat((x_right_boundary, y, t), dim = 1)
+            u_predicted_boundary = model(input)
+            u_true = torch.zeros_like(u_predicted_boundary)
+            loss_boundary += criterion_mse(u_predicted_boundary, u_true)
+            
+            # y = 0: u = exp(-t)*sin(x)
+            input = torch.cat((x, y_left_boundary, t), dim = 1)
+            u_predicted_boundary = model(input)
+            u_true = train_equation.equation_torch(x, y_left_boundary, t)
+            loss_boundary += criterion_mse(u_predicted_boundary, u_true)
+            
+            # y = pi: u = exp(-t)*sin(x)
+            input = torch.cat((x, y_right_boundary, t), dim = 1)
+            u_predicted_boundary = model(input)
+            u_true = train_equation.equation_torch(x, y_right_boundary, t)
+            loss_boundary += criterion_mse(u_predicted_boundary, u_true)
+            
+            # t = 0: u = sin(x)*cos(y)
+            input = torch.cat((x, y, t_boundary), dim = 1)
+            u_predicted_boundary = model(input)
+            u_true = train_equation.equation_torch(x, y, t_boundary)
+            loss_boundary += criterion_mse(u_predicted_boundary, u_true)
+
+            loss = loss_mse + loss_ph + loss_boundary
             mean_loss_batch += loss/len(data_train)
             mean_loss_mse += loss_mse/len(data_train)
             mean_loss_phys += loss_ph/len(data_train)
@@ -178,6 +232,10 @@ if __name__ == '__main__':
         if (epoch + 1) % print_epoch == 0:    
             print('val mse:', mean_loss_mse.item())
             print('val phys:', mean_loss_phys.item())
+            torch.save( {
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': opt.state_dict(),
+            }, f'./nn_models/model_{epoch + 1}')
         losses_val.append(mean_loss_batch.item())
         losses_mse_val.append(mean_loss_mse.item())
         losses_phys_val.append(mean_loss_phys.item())
@@ -206,7 +264,7 @@ if __name__ == '__main__':
     axs[2].legend()
 
 
-    plt.savefig('./losses_nonlinear.png')
+    plt.savefig('./losses/losses_nonlinear.png')
     plt.close()
 
     plt.clf()
@@ -254,13 +312,13 @@ if __name__ == '__main__':
     plt.figure(figsize=(8, 6))
     plt.contourf(plot_x, plot_y, plot_u, levels=100, cmap='viridis')
     plt.colorbar(label="u(x, y, t)")
-    plt.title(f"Heatmap аналитического решения при t = {0}", fontsize=14)
+    plt.title(f"Heatmap предсказанного решения при t = {test_time}", fontsize=14)
     plt.xlabel("X", fontsize=12)
     plt.ylabel("Y", fontsize=12)
     plt.grid(False)
     
     #plt.legend()
-    plt.savefig('./Network prediction nonlinear.png')
+    plt.savefig(f'./Network predictions/Network prediction nonlinear grid size {grid_size}.png')
     
     #Plot error 
     plot_true_u = plot_true_u.reshape(test_equation.x_dots, test_equation.y_dots)
@@ -269,27 +327,27 @@ if __name__ == '__main__':
     plt.figure(figsize=(8, 6))
     plt.contourf(plot_x, plot_y, plot_u, levels=100, cmap='binary')
     plt.colorbar(label="u(x, y, t)")
-    plt.title(f"Heatmap аналитического решения при t = {0}", fontsize=14)
+    plt.title(f"Heatmap ошибки решения при t = {test_time}", fontsize=14)
     plt.xlabel("X", fontsize=12)
     plt.ylabel("Y", fontsize=12)
     plt.grid(False)
     
     #plt.legend()
-    plt.savefig('./Network error nonlinear.png')
+    plt.savefig(f'./Network predictions/Network error nonlinear grid size {grid_size} t = {test_time}.png')
     
     #Real data plot
     plt.figure(figsize=(8, 6))
     plt.contourf(plot_x, plot_y, plot_true_u, levels=100, cmap='viridis')
     plt.colorbar(label="u(x, y, t)")
-    plt.title(f"Heatmap аналитического решения при t = {0}", fontsize=14)
+    plt.title(f"Heatmap аналитического решения при t = {test_time}", fontsize=14)
     plt.xlabel("X", fontsize=12)
     plt.ylabel("Y", fontsize=12)
     plt.grid(False)
     
     #plt.legend()
-    plt.savefig('./real data nonlinear.png')
+    plt.savefig(f'./real data nonlinear at time {test_time}.png')
     
     torch.save( {
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': opt.state_dict(),
-    }, './model')
+    }, f'./nn_models/model_gridsize_{grid_size}_epochs_{epochs}')

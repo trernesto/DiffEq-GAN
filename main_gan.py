@@ -11,9 +11,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Loss Section
-def diff_t(network: nn.Module, C:torch.tensor, t: torch.tensor):
-    input = torch.cat((C, t) , dim = 1)
-    u = network(input)
+def diff_t(network: nn.Module, t: torch.tensor):
+    #input = torch.cat((C, t) , dim = 1)
+    u = network(t)
     du_dt = torch.autograd.grad(u.sum(), t, create_graph=True)[0]
     #du_dx = torch.autograd.grad(u.sum(), x, create_graph=True)[0]
     return du_dt
@@ -57,8 +57,8 @@ if __name__ == '__main__':
 
     # data to train val test section
 
-    model_generator = Generator(input_size=2, number_of_hidden_layers=2, hidden_layer_size=16)
-    model_discriminator = Discriminator(number_of_hidden_layers=2, hidden_layer_size=20)
+    model_generator = Generator(input_size=1, number_of_hidden_layers=2, hidden_layer_size=40)
+    model_discriminator = Discriminator(number_of_hidden_layers=4, hidden_layer_size=20)
     model_generator.to(device)
     model_discriminator.to(device)
     
@@ -71,8 +71,8 @@ if __name__ == '__main__':
     #scheduler = ...
     
 
-    epochs = 5000
-    print_epoch = 500
+    epochs = 1200
+    print_epoch = 200
     
     losses_generator_train = []
     losses_generator_val = []
@@ -98,10 +98,10 @@ if __name__ == '__main__':
             loss_discriminator_real.backward()
             #fake part
             #MODEL
-            bC = Variable(batch_C, requires_grad=False)
+            #bC = Variable(batch_C, requires_grad=False)
             bt = Variable(batch_t + torch.rand(1) * 1e-6, requires_grad=True)
-            input = torch.cat((bC, bt), dim = 1)
-            LHS = model_generator(input) + diff_t(model_generator, C=bC, t=bt)
+            #input = torch.cat((bC, bt), dim = 1)
+            LHS = model_generator(bt) + diff_t(model_generator, t=bt)
             #model_discriminator generated loss
             model_discriminator_out_g = model_discriminator(LHS.detach())
             
@@ -147,10 +147,10 @@ if __name__ == '__main__':
             loss_discriminator_real.backward()
             #fake part
             #MODEL
-            bC = Variable(batch_C, requires_grad=False)
+            #bC = Variable(batch_C, requires_grad=False)
             bt = Variable(batch_t, requires_grad=True)
-            input = torch.cat((bC, bt), dim = 1)
-            LHS = model_generator(input) + diff_t(model_generator, C=bC, t=bt)
+            #input = torch.cat((bC, bt), dim = 1)
+            LHS = model_generator(bt) + diff_t(model_generator, t=bt)
             #model_discriminator generated loss
             model_discriminator_out_g = model_discriminator(LHS.detach())
             
@@ -216,8 +216,8 @@ if __name__ == '__main__':
 
     for true_u, t in data_test:
         c = exp_decay_const * torch.ones_like(t)
-        input = torch.cat((c, t), dim = 1)
-        u = model_generator(input)
+        #input = torch.cat((c, t), dim = 1)
+        u = model_generator(t)
         plot_true_u = np.concatenate((plot_true_u, true_u.detach().numpy().flatten()), axis = None)
         plot_u = np.concatenate((plot_u, u.detach().numpy().flatten()), axis = None)
         plot_t = np.concatenate((plot_t, t.detach().numpy().flatten()), axis = None)

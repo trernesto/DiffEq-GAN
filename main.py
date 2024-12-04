@@ -22,8 +22,8 @@ def loss_phys(network: nn.Module, C:torch.tensor, t: torch.tensor):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    train_exp_decay = ExpDecay(C = 1, N = 21, a = 0, b = 3)
-    train_exp_decay.set_points_to_random(C_start=1, C_finish=3)
+    train_exp_decay = ExpDecay(N = 11, a = 0, b = 1)
+    train_exp_decay.set_points_to_random(C_start=0, C_finish=4)
     train_u = torch.tensor(train_exp_decay.x, dtype = torch.float).view(-1, 1)
     train_t = torch.tensor(train_exp_decay.t, dtype = torch.float).view(-1, 1)
     train_C = torch.tensor(train_exp_decay.C, dtype = torch.float).view(-1, 1)
@@ -57,7 +57,7 @@ if __name__ == '__main__':
 
     # data to train val test section
 
-    model = PINN(input_size=2, number_of_hidden_layers=2, hidden_layer_size=8)
+    model = PINN(input_size=2, number_of_hidden_layers=3, hidden_layer_size=16)
     model.to(device)
     opt = torch.optim.Adam(model.parameters())
 
@@ -67,8 +67,8 @@ if __name__ == '__main__':
     #scheduler = ...
     
 
-    epochs = 20_000
-    print_epoch = 1_000
+    epochs = 12_000
+    print_epoch = 1000
     
     losses_train = []
     losses_val = []
@@ -189,14 +189,18 @@ if __name__ == '__main__':
     plot_true_u = np.array([])
     plot_u = np.array([])
     plot_t = np.array([])
+    loss_test = 0
 
     for true_u, t in data_test:
         c = exp_decay_const * torch.ones_like(t)
         input = torch.cat((c, t), dim = 1)
         u = model(input)
         plot_true_u = np.concatenate((plot_true_u, true_u.detach().numpy().flatten()), axis = None)
+        loss_test += criterion_mse(u, true_u)
         plot_u = np.concatenate((plot_u, u.detach().numpy().flatten()), axis = None)
         plot_t = np.concatenate((plot_t, t.detach().numpy().flatten()), axis = None)
+        
+    print('loss test:', loss_test)
         
     plot_train_u = np.array([])
     plot_train_t = np.array([])

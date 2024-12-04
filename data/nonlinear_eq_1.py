@@ -14,12 +14,13 @@ t ∈ (0, 1)
 '''
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 
 #Linear, 1st order, ODE
 class Nonlinear():
     # C means const in x(0); N - number of steps; a,b - borders (a<b)
     def __init__(self, C = 1, 
-                 t_start = 0, t_finish = 1, t_dots = 100, 
+                 t_start = 0, t_finish = 0.2, t_dots = 100, 
                  grid_size = 21, 
                  x_start = 0, x_finish = np.pi,
                  y_start = 0, y_finish = np.pi,
@@ -49,12 +50,15 @@ class Nonlinear():
         
     def equation(self, x: np.array, y: np.array, t: np.array) -> np.array:
         return self.C * np.sin(x) * np.cos(y) * np.exp(-t)
+    
+    def equation_torch(self, x: torch.tensor, y: torch.tensor, t: torch.tensor) -> torch.tensor:
+        return self.C * torch.sin(x) * torch.cos(y) * torch.exp(-t)
         
     def get_points_at_time(self, t = 0):
         x = np.linspace(self.x_start, self.x_finish, self.x_dots)
         y = np.linspace(self.y_start, self.y_finish, self.y_dots)
-        x, y, t = np.meshgrid(x, y, 0)
-        u = self.C * np.sin(x) * np.cos(y) * np.exp(t)
+        x, y, t = np.meshgrid(x, y, t)
+        u = self.C * np.sin(x) * np.cos(y) * np.exp(-t)
         return u, x, y, t
 
     def plot(self):
